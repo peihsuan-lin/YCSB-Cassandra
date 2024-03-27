@@ -52,6 +52,11 @@ public class DBWrapper extends DB {
   private final String scopeStringRead;
   private final String scopeStringScan;
   private final String scopeStringUpdate;
+  // add fields for driver properties
+  Properties props;
+  String readConsistencyLevel;
+  String writeConsistencyLevel;
+  String operationType;
 
   public DBWrapper(final DB db, final Tracer tracer) {
     this.db = db;
@@ -106,6 +111,8 @@ public class DBWrapper extends DB {
             this.reportLatencyForEachError + " and specific error codes to track" +
             " for latency are: " + this.latencyTrackedErrors.toString());
       }
+      readConsistencyLevel = getProperties().getProperty("cassandra.readconsistencylevel", "QUORUM").toLowerCase();
+      writeConsistencyLevel = getProperties().getProperty("cassandra.writeconsistencylevel", "QUORUM").toLowerCase();
     }
   }
 
@@ -140,8 +147,21 @@ public class DBWrapper extends DB {
       long st = System.nanoTime();
       Status res = db.read(table, key, fields, result);
       long en = System.nanoTime();
-      measure("READ", res, ist, st, en);
-      measurements.reportStatus("READ", res);
+
+      if ("all".equals(readConsistencyLevel)) {
+        operationType = "READ ALL";
+      } else if ("quorum".equals(readConsistencyLevel)) {
+        operationType = "READ MAJORITY";
+      } else if ("one".equals(readConsistencyLevel)) {
+        operationType = "READ ONE";
+      } else {
+        System.err.println("ERROR: Invalid readConsistencyLevel: '" + readConsistencyLevel + "'. Must be [ all | primary | one ]");
+        System.exit(1);
+      }
+//      measure("READ", res, ist, st, en);
+//      measurements.reportStatus("READ", res);
+      measure(operationType, res, ist, st, en);
+      measurements.reportStatus(operationType, res);
       return res;
     }
   }
@@ -164,8 +184,18 @@ public class DBWrapper extends DB {
       long st = System.nanoTime();
       Status res = db.scan(table, startkey, recordcount, fields, result);
       long en = System.nanoTime();
-      measure("SCAN", res, ist, st, en);
-      measurements.reportStatus("SCAN", res);
+      if ("all".equals(readConsistencyLevel)) {
+        operationType = "SCAN ALL";
+      } else if ("quorum".equals(readConsistencyLevel)) {
+        operationType = "SCAN MAJORITY";
+      } else if ("one".equals(readConsistencyLevel)) {
+        operationType = "SCAN ONE";
+      } else {
+        System.err.println("ERROR: Invalid readConsistencyLevel: '" + readConsistencyLevel + "'. Must be [ all | primary | one ]");
+        System.exit(1);
+      }
+      measure(operationType, res, ist, st, en);
+      measurements.reportStatus(operationType, res);
       return res;
     }
   }
@@ -203,8 +233,18 @@ public class DBWrapper extends DB {
       long st = System.nanoTime();
       Status res = db.update(table, key, values);
       long en = System.nanoTime();
-      measure("UPDATE", res, ist, st, en);
-      measurements.reportStatus("UPDATE", res);
+      if ("all".equals(writeConsistencyLevel)) {
+        operationType = "UPDATE ALL";
+      } else if ("quorum".equals(writeConsistencyLevel)) {
+        operationType = "UPDATE MAJORITY";
+      } else if ("one".equals(writeConsistencyLevel)) {
+        operationType = "UPDATE ONE";
+      } else {
+        System.err.println("ERROR: Invalid writeConsistencyLevel: '" + writeConsistencyLevel + "'. Must be [ all | primary | one ]");
+        System.exit(1);
+      }
+      measure(operationType, res, ist, st, en);
+      measurements.reportStatus(operationType, res);
       return res;
     }
   }
@@ -226,9 +266,19 @@ public class DBWrapper extends DB {
       long st = System.nanoTime();
       Status res = db.insert(table, key, values);
       long en = System.nanoTime();
-      measure("INSERT", res, ist, st, en);
-      measurements.reportStatus("INSERT", res);
-      return res;
+      if ("all".equals(writeConsistencyLevel)) {
+        operationType = "INSERT ALL";
+      } else if ("quorum".equals(writeConsistencyLevel)) {
+        operationType = "INSERT MAJORITY";
+      } else if ("one".equals(writeConsistencyLevel)) {
+        operationType = "INSERT ONE";
+      } else {
+        System.err.println("ERROR: Invalid writeConsistencyLevel: '" + writeConsistencyLevel + "'. Must be [ all | primary | one ]");
+        System.exit(1);
+      }
+        measure(operationType, res, ist, st, en);
+        measurements.reportStatus(operationType, res);
+        return res;
     }
   }
 
@@ -245,8 +295,18 @@ public class DBWrapper extends DB {
       long st = System.nanoTime();
       Status res = db.delete(table, key);
       long en = System.nanoTime();
-      measure("DELETE", res, ist, st, en);
-      measurements.reportStatus("DELETE", res);
+      if ("all".equals(writeConsistencyLevel)) {
+        operationType = "DELETE ALL";
+      } else if ("quorum".equals(writeConsistencyLevel)) {
+        operationType = "DELETE MAJORITY";
+      } else if ("one".equals(writeConsistencyLevel)) {
+        operationType = "DELETE ONE";
+      } else {
+        System.err.println("ERROR: Invalid writeConsistencyLevel: '" + writeConsistencyLevel + "'. Must be [ all | primary | one ]");
+        System.exit(1);
+      }
+      measure(operationType, res, ist, st, en);
+      measurements.reportStatus(operationType, res);
       return res;
     }
   }
