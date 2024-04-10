@@ -17,11 +17,9 @@
 
 package site.ycsb;
 
-import java.util.Map;
-
-import site.ycsb.measurements.Measurements;
 import org.apache.htrace.core.TraceScope;
 import org.apache.htrace.core.Tracer;
+import site.ycsb.measurements.Measurements;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Wrapper around a "real" DB that measures latencies and counts return codes.
  * Also reports latency separately between OK and failed operations.
  */
-public class DBWrapper extends DB {
+public class DBWrapperCassandra extends DB {
   private final DB db;
   private final Measurements measurements;
   private final Tracer tracer;
@@ -52,12 +50,8 @@ public class DBWrapper extends DB {
   private final String scopeStringRead;
   private final String scopeStringScan;
   private final String scopeStringUpdate;
-  // add fields for driver properties
-  private String readConsistencyLevel;
-  private String writeConsistencyLevel;
-  private String operationType;
 
-  public DBWrapper(final DB db, final Tracer tracer) {
+  public DBWrapperCassandra(final DB db, final Tracer tracer) {
     this.db = db;
     measurements = Measurements.getMeasurements();
     this.tracer = tracer;
@@ -110,9 +104,8 @@ public class DBWrapper extends DB {
             this.reportLatencyForEachError + " and specific error codes to track" +
             " for latency are: " + this.latencyTrackedErrors.toString());
       }
-      readConsistencyLevel = getProperties().getProperty("cassandra.readconsistencylevel", "QUORUM").toLowerCase();
-      writeConsistencyLevel = getProperties().getProperty("cassandra.writeconsistencylevel", "QUORUM").toLowerCase();
     }
+
   }
 
   /**
@@ -133,8 +126,8 @@ public class DBWrapper extends DB {
    * Read a record from the database. Each field/value pair from the result
    * will be stored in a HashMap.
    *
-   * @param table  The name of the table
-   * @param key    The record key of the record to read.
+   * @param table The name of the table
+   * @param key The record key of the record to read.
    * @param fields The list of fields to read, or null for all of them
    * @param result A HashMap of field/value pairs for the result
    * @return The result of the operation.
@@ -146,20 +139,22 @@ public class DBWrapper extends DB {
       long st = System.nanoTime();
       Status res = db.read(table, key, fields, result);
       long en = System.nanoTime();
-      if ("all".equals(getReadConsistencyLevel())) {
-        setOperationType("READ ALL");
-      } else if ("quorum".equals(getReadConsistencyLevel())) {
-        setOperationType("READ MAJORITY");
-      } else if ("one".equals(getReadConsistencyLevel())) {
-        setOperationType("READ ONE");
-      } else {
-        System.err.println("ERROR: Invalid readConsistencyLevel: '" + getReadConsistencyLevel() +
-            "'. Must be [ all | primary | one ]");
-        System.exit(1);
-      }
-      measure(getOperationType(), res, ist, st, en);
-      measurements.reportStatus(getOperationType(), res);
+      measure("READ", res, ist, st, en);
+      measurements.reportStatus("READ", res);
       return res;
+
+//      Select.Selection select = QueryBuilder.select();
+//      fields.forEach(select::column);
+//      Select.Where selectWhere = select.from(table).where(QueryBuilder.eq("key", key));
+//      String readConsistencyLevel = props.getProperty("cassandra.readConsistencyLevel", "QUORUM");
+//      selectWhere.setConsistencyLevel(readConsistencyLevel);
+//
+//      long startTime = System.nanoTime();
+//      session.execute(selectWhere);
+//      long endTime = System.nanoTime();
+//
+//      measurements.measure("READ", (int) ((endTime - startTime) / 1000));
+
     }
   }
 
@@ -167,11 +162,11 @@ public class DBWrapper extends DB {
    * Perform a range scan for a set of records in the database.
    * Each field/value pair from the result will be stored in a HashMap.
    *
-   * @param table       The name of the table
-   * @param startkey    The record key of the first record to read.
+   * @param table The name of the table
+   * @param startkey The record key of the first record to read.
    * @param recordcount The number of records to read
-   * @param fields      The list of fields to read, or null for all of them
-   * @param result      A Vector of HashMaps, where each HashMap is a set field/value pairs for one record
+   * @param fields The list of fields to read, or null for all of them
+   * @param result A Vector of HashMaps, where each HashMap is a set field/value pairs for one record
    * @return The result of the operation.
    */
   public Status scan(String table, String startkey, int recordcount,
@@ -181,19 +176,8 @@ public class DBWrapper extends DB {
       long st = System.nanoTime();
       Status res = db.scan(table, startkey, recordcount, fields, result);
       long en = System.nanoTime();
-      if ("all".equals(getReadConsistencyLevel())) {
-        setOperationType("SCAN ALL");
-      } else if ("quorum".equals(getReadConsistencyLevel())) {
-        setOperationType("SCAN MAJORITY");
-      } else if ("one".equals(getReadConsistencyLevel())) {
-        setOperationType("SCAN ONE");
-      } else {
-        System.err.println("ERROR: Invalid readConsistencyLevel: '" + getReadConsistencyLevel() +
-            "'. Must be [ all | primary | one ]");
-        System.exit(1);
-      }
-      measure(getOperationType(), res, ist, st, en);
-      measurements.reportStatus(getOperationType(), res);
+      measure("SCAN", res, ist, st, en);
+      measurements.reportStatus("SCAN", res);
       return res;
     }
   }
@@ -219,8 +203,8 @@ public class DBWrapper extends DB {
    * Update a record in the database. Any field/value pairs in the specified values HashMap will be written into the
    * record with the specified record key, overwriting any existing values with the same field name.
    *
-   * @param table  The name of the table
-   * @param key    The record key of the record to write.
+   * @param table The name of the table
+   * @param key The record key of the record to write.
    * @param values A HashMap of field/value pairs to update in the record
    * @return The result of the operation.
    */
@@ -231,19 +215,8 @@ public class DBWrapper extends DB {
       long st = System.nanoTime();
       Status res = db.update(table, key, values);
       long en = System.nanoTime();
-      if ("all".equals(getWriteConsistencyLevel())) {
-        setOperationType("UPDATE ALL");
-      } else if ("quorum".equals(getWriteConsistencyLevel())) {
-        setOperationType("UPDATE MAJORITY");
-      } else if ("one".equals(getWriteConsistencyLevel())) {
-        setOperationType("UPDATE ONE");
-      } else {
-        System.err.println("ERROR: Invalid writeConsistencyLevel: '" + getWriteConsistencyLevel() + "'" +
-            ". Must be [ all | primary | one ]");
-        System.exit(1);
-      }
-      measure(getOperationType(), res, ist, st, en);
-      measurements.reportStatus(getOperationType(), res);
+      measure("UPDATE", res, ist, st, en);
+      measurements.reportStatus("UPDATE", res);
       return res;
     }
   }
@@ -253,8 +226,8 @@ public class DBWrapper extends DB {
    * values HashMap will be written into the record with the specified
    * record key.
    *
-   * @param table  The name of the table
-   * @param key    The record key of the record to insert.
+   * @param table The name of the table
+   * @param key The record key of the record to insert.
    * @param values A HashMap of field/value pairs to insert in the record
    * @return The result of the operation.
    */
@@ -265,19 +238,8 @@ public class DBWrapper extends DB {
       long st = System.nanoTime();
       Status res = db.insert(table, key, values);
       long en = System.nanoTime();
-      if ("all".equals(getWriteConsistencyLevel())) {
-        setOperationType("INSERT ALL");
-      } else if ("quorum".equals(getWriteConsistencyLevel())) {
-        setOperationType("INSERT MAJORITY");
-      } else if ("one".equals(getWriteConsistencyLevel())) {
-        setOperationType("INSERT ONE");
-      } else {
-        System.err.println("ERROR: Invalid writeConsistencyLevel: '" + getWriteConsistencyLevel() +
-            "'. Must be [ all | primary | one ]");
-        System.exit(1);
-      }
-      measure(getOperationType(), res, ist, st, en);
-      measurements.reportStatus(getOperationType(), res);
+      measure("INSERT", res, ist, st, en);
+      measurements.reportStatus("INSERT", res);
       return res;
     }
   }
@@ -286,7 +248,7 @@ public class DBWrapper extends DB {
    * Delete a record from the database.
    *
    * @param table The name of the table
-   * @param key   The record key of the record to delete.
+   * @param key The record key of the record to delete.
    * @return The result of the operation.
    */
   public Status delete(String table, String key) {
@@ -295,36 +257,9 @@ public class DBWrapper extends DB {
       long st = System.nanoTime();
       Status res = db.delete(table, key);
       long en = System.nanoTime();
-      if ("all".equals(getWriteConsistencyLevel())) {
-        setOperationType("DELETE ALL");
-      } else if ("quorum".equals(getWriteConsistencyLevel())) {
-        setOperationType("DELETE MAJORITY");
-      } else if ("one".equals(getWriteConsistencyLevel())) {
-        setOperationType("DELETE ONE");
-      } else {
-        System.err.println("ERROR: Invalid writeConsistencyLevel: '" + getWriteConsistencyLevel() +
-            "'. Must be [ all | primary | one ]");
-        System.exit(1);
-      }
-      measure(getOperationType(), res, ist, st, en);
-      measurements.reportStatus(getOperationType(), res);
+      measure("DELETE", res, ist, st, en);
+      measurements.reportStatus("DELETE", res);
       return res;
     }
-  }
-
-  public String getReadConsistencyLevel() {
-    return readConsistencyLevel;
-  }
-
-  public String getWriteConsistencyLevel() {
-    return writeConsistencyLevel;
-  }
-
-  public String getOperationType() {
-    return operationType;
-  }
-
-  public void setOperationType(String type) {
-    this.operationType = type;
   }
 }
